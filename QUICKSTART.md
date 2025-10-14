@@ -2,7 +2,7 @@
 
 ## 系统概述
 
-本系统实现了云边协同的动态电压频率调整（DVFS），云端可以远程控制边缘端（Jetson TX2）的CPU频率。
+本系统实现了云边协同的动态电压频率调整（DVFS），云端可以远程控制边缘端（Jetson TX2）的CPU和GPU频率。
 
 ### 系统架构
 
@@ -198,14 +198,90 @@ python3 cloud.py --use-tunnel --interactive
 在交互模式中，可以使用简化的命令：
 
 ```
-DVFS> help                # 显示帮助
-DVFS> status              # 查询状态
-DVFS> freq 0.5            # 设置频率到50%
-DVFS> freq 1200000        # 设置频率到1.2GHz
-DVFS> freq 0.8 0          # 设置CPU0到80%频率
-DVFS> governor userspace  # 设置调频策略
-DVFS> quit                # 退出
+DVFS> help                    # 显示帮助
+DVFS> status                  # 查询CPU状态
+DVFS> status gpu              # 查询GPU状态
+DVFS> status all              # 查询CPU和GPU状态
+DVFS> freq 0.5                # 设置CPU频率到50%
+DVFS> freq 0.8 gpu            # 设置GPU频率到80%
+DVFS> freq 0.8 0              # 设置CPU0到80%频率
+DVFS> governor userspace      # 设置CPU调频策略
+DVFS> governor userspace gpu  # 设置GPU调频策略
+DVFS> quit                    # 退出
 ```
+
+---
+
+## GPU控制功能
+
+### GPU控制说明
+
+除了CPU，本系统还支持控制Jetson TX2的GPU频率。GPU控制使用与CPU相同的接口，只需指定 `--target gpu` 参数。
+
+### GPU频率控制
+
+#### 查询GPU状态
+
+```bash
+# 只查询GPU状态
+python3 cloud.py --use-tunnel --status --target gpu
+
+# 同时查询CPU和GPU状态
+python3 cloud.py --use-tunnel --status --target all
+```
+
+#### 设置GPU频率
+
+使用**频率索引**（推荐）：
+
+```bash
+# 设置GPU到最低频率
+python3 cloud.py --use-tunnel --freq 0.0 --target gpu
+
+# 设置GPU到中等频率
+python3 cloud.py --use-tunnel --freq 0.5 --target gpu
+
+# 设置GPU到最高频率
+python3 cloud.py --use-tunnel --freq 1.0 --target gpu
+```
+
+使用**具体频率值**（单位：Hz）：
+
+```bash
+# 设置GPU到800MHz (800000000 Hz)
+python3 cloud.py --use-tunnel --freq 800000000 --target gpu
+```
+
+#### 设置GPU调频策略
+
+```bash
+# 设置GPU为userspace模式（用于手动控制）
+python3 cloud.py --use-tunnel --governor userspace --target gpu
+```
+
+### CPU和GPU同时控制
+
+在交互模式中，可以方便地在CPU和GPU之间切换：
+
+```bash
+python3 cloud.py --use-tunnel --interactive
+
+DVFS> status all              # 查看所有状态
+DVFS> governor userspace      # 设置CPU为userspace
+DVFS> governor userspace gpu  # 设置GPU为userspace
+DVFS> freq 0.5                # 设置CPU到50%
+DVFS> freq 0.8 gpu            # 设置GPU到80%
+DVFS> status all              # 再次查看所有状态
+```
+
+### GPU频率说明
+
+Jetson TX2的GPU支持多个频率档位，通常范围为：
+- **最低频率**: 约 76.8 MHz
+- **最高频率**: 约 1.3 GHz
+- **档位数量**: 18档（根据具体配置可能不同）
+
+**注意**: GPU频率单位为Hz，与CPU频率（kHz）不同。
 
 ---
 

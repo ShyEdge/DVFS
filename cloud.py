@@ -196,64 +196,76 @@ class CloudDVFSClient:
             print(f"错误: {e}")
             return {'status': 'error', 'message': str(e)}
     
-    def set_frequency(self, frequency, cpu=None):
-        """设置CPU频率
+    def set_frequency(self, frequency, cpu=None, target='cpu'):
+        """设置CPU或GPU频率
         
         Args:
-            frequency: 目标频率(kHz)或0-1之间的频率索引比例
-            cpu: CPU核心编号，None表示所有核心
+            frequency: 目标频率(kHz/Hz)或0-1之间的频率索引比例
+            cpu: CPU核心编号，None表示所有核心（仅CPU时有效）
+            target: 'cpu' 或 'gpu'
         """
         command = {
             'action': 'set_frequency',
             'frequency': frequency,
+            'target': target,
             'timestamp': datetime.now().isoformat()
         }
         
-        if cpu is not None:
+        if cpu is not None and target == 'cpu':
             command['cpu'] = cpu
         
         response = self.send_command(command)
         return response
     
-    def get_status(self):
-        """获取边缘端CPU状态"""
+    def get_status(self, target='cpu'):
+        """获取边缘端CPU或GPU状态
+        
+        Args:
+            target: 'cpu', 'gpu' 或 'all'
+        """
         command = {
             'action': 'get_status',
+            'target': target,
             'timestamp': datetime.now().isoformat()
         }
         
         response = self.send_command(command)
         return response
     
-    def set_governor(self, governor='userspace', cpu=None):
+    def set_governor(self, governor='userspace', cpu=None, target='cpu'):
         """设置调频策略
         
         Args:
             governor: 调频策略名称
-            cpu: CPU核心编号，None表示所有核心
+            cpu: CPU核心编号，None表示所有核心（仅CPU时有效）
+            target: 'cpu' 或 'gpu'
         """
         command = {
             'action': 'set_governor',
             'governor': governor,
+            'target': target,
             'timestamp': datetime.now().isoformat()
         }
         
-        if cpu is not None:
+        if cpu is not None and target == 'cpu':
             command['cpu'] = cpu
         
         response = self.send_command(command)
         return response
 
 
-def print_status(status_info):
-    """美化打印状态信息"""
+def print_cpu_status(status_info):
+    """美化打印CPU状态信息"""
     print("\n" + "=" * 60)
     print("边缘端CPU状态")
     print("=" * 60)
     
     for cpu_name, info in sorted(status_info.items()):
         print(f"\n{cpu_name.upper()}:")
-        print(f"  当前频率: {info['current_freq']} kHz ({info['current_freq']/1000:.1f} MHz)")
+        if info['current_freq']:
+            print(f"  当前频率: {info['current_freq']} kHz ({info['current_freq']/1000:.1f} MHz)")
+        else:
+            print(f"  当前频率: N/A")
         print(f"  调频策略: {info['governor']}")
         
         if info['available_freqs']:
@@ -265,6 +277,35 @@ def print_status(status_info):
     print("=" * 60 + "\n")
 
 
+def print_gpu_status(gpu_info):
+    """美化打印GPU状态信息"""
+    print("\n" + "=" * 60)
+    print("边缘端GPU状态")
+    print("=" * 60)
+    
+    print("\nGPU:")
+    if gpu_info.get('current_freq'):
+        freq_mhz = gpu_info['current_freq'] / 1000000
+        print(f"  当前频率: {gpu_info['current_freq']} Hz ({freq_mhz:.1f} MHz)")
+    else:
+        print(f"  当前频率: N/A")
+    
+    print(f"  调频策略: {gpu_info.get('governor', 'N/A')}")
+    
+    if gpu_info.get('available_freqs'):
+        freqs = gpu_info['available_freqs']
+        print(f"  可用频率: {len(freqs)} 档")
+        min_freq_mhz = min(freqs) / 1000000
+        max_freq_mhz = max(freqs) / 1000000
+        print(f"    最低: {min(freqs)} Hz ({min_freq_mhz:.1f} MHz)")
+        print(f"    最高: {max(freqs)} Hz ({max_freq_mhz:.1f} MHz)")
+    
+    if gpu_info.get('path'):
+        print(f"  控制路径: {gpu_info['path']}")
+    
+    print("=" * 60 + "\n")
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -272,35 +313,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 使用SSH隧道查询状态（推荐）
-  python3 cloud.py --use-tunnel --status
+  # 查询CPU和GPU状态
+  python3 cloud.py --use-tunnel --status --target all
   
-  # 使用SSH隧道设置频率
+  # 查询GPU状态
+  python3 cloud.py --use-tunnel --status --target gpu
+  
+  # 设置CPU频率到50%
   python3 cloud.py --use-tunnel --freq 0.5
   
-  # 使用SSH隧道进入交互模式
-  python3 cloud.py --use-tunnel --interactive
+  # 设置GPU频率到80%
+  python3 cloud.py --use-tunnel --freq 0.8 --target gpu
   
-  # 直接连接查询边缘端状态
-  python3 cloud.py --status
+  # 设置CPU调频策略为userspace
+  python3 cloud.py --use-tunnel --governor userspace
   
-  # 设置所有CPU到最低频率（频率索引0.0）
-  python3 cloud.py --use-tunnel --freq 0.0
+  # 设置GPU调频策略为userspace
+  python3 cloud.py --use-tunnel --governor userspace --target gpu
   
-  # 设置所有CPU到最高频率（频率索引1.0）
-  python3 cloud.py --use-tunnel --freq 1.0
-  
-  # 设置所有CPU到中等频率（频率索引0.5）
-  python3 cloud.py --use-tunnel --freq 0.5
-  
-  # 设置所有CPU到指定频率（kHz）
-  python3 cloud.py --use-tunnel --freq 1200000
-  
-  # 只设置CPU0的频率
+  # 设置CPU0的频率
   python3 cloud.py --use-tunnel --freq 0.8 --cpu 0
   
-  # 设置调频策略为userspace
-  python3 cloud.py --use-tunnel --governor userspace
+  # 交互模式（推荐）
+  python3 cloud.py --use-tunnel --interactive
         """
     )
     
@@ -323,13 +358,15 @@ def main():
                         help=f'SSH隧道本地端口 (默认: {LOCAL_TUNNEL_PORT})')
     
     parser.add_argument('--freq', '--frequency', type=float,
-                        help='目标频率(kHz)或频率索引(0.0-1.0)')
+                        help='目标频率(kHz/Hz)或频率索引(0.0-1.0)')
     parser.add_argument('--cpu', type=int,
                         help='指定CPU核心编号，不指定则应用到所有核心')
+    parser.add_argument('--target', type=str, default='cpu', choices=['cpu', 'gpu', 'all'],
+                        help='控制目标：cpu, gpu 或 all (默认: cpu)')
     parser.add_argument('--governor', type=str,
                         help='设置调频策略 (如: userspace, performance, powersave)')
     parser.add_argument('--status', action='store_true',
-                        help='查询边缘端CPU状态')
+                        help='查询边缘端状态')
     parser.add_argument('--interactive', '-i', action='store_true',
                         help='进入交互模式')
     
@@ -372,22 +409,34 @@ def main():
     
     # 执行单个命令
     if args.status:
-        response = client.get_status()
+        response = client.get_status(target=args.target)
         if response['status'] == 'success':
-            print_status(response['status_info'])
+            if args.target == 'all':
+                if 'cpu_status' in response:
+                    print_cpu_status(response['cpu_status'])
+                if 'gpu_status' in response:
+                    print_gpu_status(response['gpu_status'])
+            elif args.target == 'gpu':
+                if 'gpu_status' in response:
+                    print_gpu_status(response['gpu_status'])
+            else:  # cpu
+                if 'status_info' in response:
+                    print_cpu_status(response['status_info'])
         else:
             print(f"错误: {response.get('message', '未知错误')}")
     
     elif args.governor:
-        response = client.set_governor(args.governor, args.cpu)
+        response = client.set_governor(args.governor, args.cpu, target=args.target)
         print(f"\n结果: {response.get('message', response['status'])}\n")
     
     elif args.freq is not None:
-        response = client.set_frequency(args.freq, args.cpu)
+        response = client.set_frequency(args.freq, args.cpu, target=args.target)
         if response['status'] == 'success':
             print(f"\n结果: {response.get('message', '成功')}\n")
             if 'current_status' in response:
-                print_status(response['current_status'])
+                print_cpu_status(response['current_status'])
+            elif 'gpu_status' in response:
+                print_gpu_status(response['gpu_status'])
         else:
             print(f"\n错误: {response.get('message', '未知错误')}\n")
     
@@ -411,39 +460,67 @@ def interactive_mode(client):
             if cmd.lower() == 'help':
                 print("""
 可用命令:
-  status                    - 查询边缘端CPU状态
-  freq <频率>               - 设置频率 (kHz或0.0-1.0的索引)
-  freq <频率> <CPU编号>     - 设置指定CPU的频率
-  governor <策略>           - 设置调频策略
-  help                      - 显示此帮助
-  quit                      - 退出
+  status [target]              - 查询边缘端状态 (target: cpu/gpu/all，默认cpu)
+  freq <频率> [target]         - 设置频率 (kHz/Hz或0.0-1.0的索引)
+  freq <频率> <CPU编号>        - 设置指定CPU的频率
+  governor <策略> [target]     - 设置调频策略 (target: cpu/gpu，默认cpu)
+  help                         - 显示此帮助
+  quit                         - 退出
 
 示例:
-  status
-  freq 0.5
-  freq 1200000
-  freq 0.8 0
-  governor userspace
+  status                    - 查询CPU状态
+  status gpu                - 查询GPU状态
+  status all                - 查询所有状态
+  freq 0.5                  - 设置CPU频率到50%
+  freq 0.8 gpu              - 设置GPU频率到80%
+  freq 1200000              - 设置CPU到指定频率
+  freq 0.8 0                - 设置CPU0到80%
+  governor userspace        - 设置CPU调频策略
+  governor userspace gpu    - 设置GPU调频策略
                 """)
                 continue
             
             parts = cmd.split()
             
             if parts[0] == 'status':
-                response = client.get_status()
+                target = parts[1] if len(parts) >= 2 else 'cpu'
+                response = client.get_status(target=target)
                 if response['status'] == 'success':
-                    print_status(response['status_info'])
+                    if target == 'all':
+                        if 'cpu_status' in response:
+                            print_cpu_status(response['cpu_status'])
+                        if 'gpu_status' in response:
+                            print_gpu_status(response['gpu_status'])
+                    elif target == 'gpu':
+                        if 'gpu_status' in response:
+                            print_gpu_status(response['gpu_status'])
+                    else:  # cpu
+                        if 'status_info' in response:
+                            print_cpu_status(response['status_info'])
                 else:
                     print(f"错误: {response.get('message', '未知错误')}")
             
             elif parts[0] == 'freq' and len(parts) >= 2:
                 freq = float(parts[1])
-                cpu = int(parts[2]) if len(parts) >= 3 else None
-                response = client.set_frequency(freq, cpu)
+                # 判断第三个参数是target还是CPU编号
+                if len(parts) >= 3:
+                    if parts[2] in ['cpu', 'gpu']:
+                        target = parts[2]
+                        cpu = None
+                    else:
+                        target = 'cpu'
+                        cpu = int(parts[2])
+                else:
+                    target = 'cpu'
+                    cpu = None
+                
+                response = client.set_frequency(freq, cpu, target=target)
                 print(f"结果: {response.get('message', response['status'])}")
             
             elif parts[0] == 'governor' and len(parts) >= 2:
-                response = client.set_governor(parts[1])
+                governor = parts[1]
+                target = parts[2] if len(parts) >= 3 else 'cpu'
+                response = client.set_governor(governor, target=target)
                 print(f"结果: {response.get('message', response['status'])}")
             
             else:
