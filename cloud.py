@@ -16,6 +16,61 @@ import signal
 import atexit
 from datetime import datetime
 
+# ANSI颜色代码
+class Colors:
+    """终端颜色控制"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    
+    # 前景色
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # 亮色
+    BRIGHT_BLACK = '\033[90m'
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
+    
+    # 背景色
+    BG_BLACK = '\033[40m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+    BG_WHITE = '\033[47m'
+    
+    @staticmethod
+    def disable():
+        """禁用颜色（用于不支持ANSI的终端）"""
+        Colors.RESET = ''
+        Colors.BOLD = ''
+        Colors.DIM = ''
+        Colors.BLACK = Colors.RED = Colors.GREEN = Colors.YELLOW = ''
+        Colors.BLUE = Colors.MAGENTA = Colors.CYAN = Colors.WHITE = ''
+        Colors.BRIGHT_BLACK = Colors.BRIGHT_RED = Colors.BRIGHT_GREEN = ''
+        Colors.BRIGHT_YELLOW = Colors.BRIGHT_BLUE = Colors.BRIGHT_MAGENTA = ''
+        Colors.BRIGHT_CYAN = Colors.BRIGHT_WHITE = ''
+        Colors.BG_BLACK = Colors.BG_RED = Colors.BG_GREEN = Colors.BG_YELLOW = ''
+        Colors.BG_BLUE = Colors.BG_MAGENTA = Colors.BG_CYAN = Colors.BG_WHITE = ''
+
+# 检测终端是否支持颜色
+if not sys.stdout.isatty() or os.getenv('NO_COLOR'):
+    Colors.disable()
+
 # 配置
 EDGE_HOST = '114.212.81.186'  # 边缘端IP地址
 EDGE_PORT = 9999  # 边缘端DVFS服务端口
@@ -26,6 +81,122 @@ LOCAL_TUNNEL_PORT = 19999  # 本地隧道端口
 
 # 全局变量，用于存储SSH隧道进程
 _ssh_tunnel_process = None
+
+
+def draw_progress_bar(percentage, width=40, color=Colors.CYAN):
+    """绘制进度条
+    
+    Args:
+        percentage: 百分比 (0.0-1.0)
+        width: 进度条宽度
+        color: 进度条颜色
+    
+    Returns:
+        进度条字符串
+    """
+    filled = int(width * percentage)
+    empty = width - filled
+    
+    bar = color + '█' * filled + Colors.DIM + '░' * empty + Colors.RESET
+    percent_text = f"{percentage * 100:5.1f}%"
+    
+    return f"[{bar}] {Colors.BOLD}{percent_text}{Colors.RESET}"
+
+
+def format_frequency(freq_hz, unit='auto'):
+    """格式化频率显示
+    
+    Args:
+        freq_hz: 频率（Hz）
+        unit: 单位 ('auto', 'Hz', 'kHz', 'MHz', 'GHz')
+    
+    Returns:
+        格式化的频率字符串
+    """
+    if freq_hz is None:
+        return "N/A"
+    
+    if unit == 'auto':
+        if freq_hz >= 1_000_000_000:
+            return f"{freq_hz / 1_000_000_000:.2f} GHz"
+        elif freq_hz >= 1_000_000:
+            return f"{freq_hz / 1_000_000:.1f} MHz"
+        elif freq_hz >= 1_000:
+            return f"{freq_hz / 1_000:.1f} kHz"
+        else:
+            return f"{freq_hz} Hz"
+    elif unit == 'GHz':
+        return f"{freq_hz / 1_000_000_000:.2f} GHz"
+    elif unit == 'MHz':
+        return f"{freq_hz / 1_000_000:.1f} MHz"
+    elif unit == 'kHz':
+        return f"{freq_hz / 1_000:.1f} kHz"
+    else:
+        return f"{freq_hz} Hz"
+
+
+def print_table_row(columns, widths, colors=None, separator='│'):
+    """打印表格行
+    
+    Args:
+        columns: 列内容列表
+        widths: 每列宽度列表
+        colors: 每列颜色列表（可选）
+        separator: 列分隔符
+    """
+    if colors is None:
+        colors = [Colors.RESET] * len(columns)
+    
+    row = separator
+    for col, width, color in zip(columns, widths, colors):
+        # 计算实际显示长度（去除ANSI颜色代码）
+        display_len = len(col)
+        for c in [Colors.RESET, Colors.BOLD, Colors.DIM, Colors.RED, Colors.GREEN, 
+                  Colors.YELLOW, Colors.BLUE, Colors.MAGENTA, Colors.CYAN, Colors.WHITE,
+                  Colors.BRIGHT_RED, Colors.BRIGHT_GREEN, Colors.BRIGHT_YELLOW,
+                  Colors.BRIGHT_BLUE, Colors.BRIGHT_MAGENTA, Colors.BRIGHT_CYAN]:
+            if c and c in col:
+                display_len -= len(c)
+        
+        padding = width - display_len
+        row += f" {color}{col}{Colors.RESET}{' ' * padding} {separator}"
+    
+    print(row)
+
+
+def print_table_separator(widths, left='├', mid='┼', right='┤', line='─'):
+    """打印表格分隔线"""
+    parts = [left]
+    for i, width in enumerate(widths):
+        parts.append(line * (width + 2))
+        if i < len(widths) - 1:
+            parts.append(mid)
+    parts.append(right)
+    print(''.join(parts))
+
+
+def print_box(title, content, color=Colors.CYAN):
+    """打印边框盒子
+    
+    Args:
+        title: 标题
+        content: 内容列表（每个元素一行）
+        color: 边框颜色
+    """
+    width = max(len(title), max(len(line) for line in content) if content else 0) + 4
+    
+    # 上边框
+    print(f"{color}╔{'═' * width}╗{Colors.RESET}")
+    # 标题
+    print(f"{color}║{Colors.RESET} {Colors.BOLD}{title.center(width - 2)}{Colors.RESET} {color}║{Colors.RESET}")
+    # 分隔线
+    print(f"{color}╠{'═' * width}╣{Colors.RESET}")
+    # 内容
+    for line in content:
+        padding = width - len(line) - 2
+        print(f"{color}║{Colors.RESET} {line}{' ' * padding} {color}║{Colors.RESET}")
+    # 下边框
+    print(f"{color}╚{'═' * width}╝{Colors.RESET}")
 
 
 def cleanup_tunnel():
@@ -165,35 +336,39 @@ class CloudDVFSClient:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             
-            print(f"正在连接到边缘端 {self.host}:{self.port}...")
+            print(f"{Colors.DIM}正在连接到边缘端 {self.host}:{self.port}...{Colors.RESET}", end=' ')
             sock.connect((self.host, self.port))
-            print("连接成功！")
+            print(f"{Colors.GREEN}✓{Colors.RESET}")
             
             # 发送命令
             cmd_json = json.dumps(command)
-            print(f"发送命令: {cmd_json}")
+            print(f"{Colors.DIM}发送命令: {cmd_json}{Colors.RESET}")
             sock.sendall(cmd_json.encode('utf-8'))
             
             # 接收响应
             response_data = sock.recv(8192).decode('utf-8')
             response = json.loads(response_data)
             
-            print(f"收到响应: {response.get('status', 'unknown')}")
+            status = response.get('status', 'unknown')
+            if status == 'success':
+                print(f"{Colors.DIM}收到响应: {Colors.GREEN}{status}{Colors.RESET}")
+            else:
+                print(f"{Colors.DIM}收到响应: {Colors.RED}{status}{Colors.RESET}")
             
             sock.close()
             return response
             
         except socket.timeout:
-            print(f"错误: 连接超时 ({self.timeout}秒)")
+            print(f"\n{Colors.RED}✗ 错误: 连接超时 ({self.timeout}秒){Colors.RESET}")
             return {'status': 'error', 'message': '连接超时'}
         
         except ConnectionRefusedError:
-            print(f"错误: 无法连接到 {self.host}:{self.port}")
-            print("请确保边缘端服务正在运行 (运行 edge.py)")
+            print(f"\n{Colors.RED}✗ 错误: 无法连接到 {self.host}:{self.port}{Colors.RESET}")
+            print(f"{Colors.YELLOW}请确保边缘端服务正在运行 (运行 edge.py){Colors.RESET}")
             return {'status': 'error', 'message': '连接被拒绝'}
         
         except Exception as e:
-            print(f"错误: {e}")
+            print(f"\n{Colors.RED}✗ 错误: {e}{Colors.RESET}")
             return {'status': 'error', 'message': str(e)}
     
     def set_frequency(self, frequency, cpu=None, target='cpu'):
@@ -256,54 +431,160 @@ class CloudDVFSClient:
 
 def print_cpu_status(status_info):
     """美化打印CPU状态信息"""
-    print("\n" + "=" * 60)
-    print("边缘端CPU状态")
-    print("=" * 60)
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 30}边缘端CPU状态{' ' * 32}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * 78}╝{Colors.RESET}\n")
     
+    # 表头
+    widths = [8, 18, 15, 15, 18]
+    headers = ["CPU", "当前频率", "频率档位", "调频策略", "频率范围"]
+    
+    # 打印表头
+    print(f"{Colors.BOLD}┌{'─' * (sum(widths) + len(widths) * 3 + 1)}┐{Colors.RESET}")
+    colors = [Colors.BOLD + Colors.BRIGHT_YELLOW] * len(headers)
+    print_table_row(headers, widths, colors, '│')
+    print(f"{Colors.BOLD}├{'─' * (sum(widths) + len(widths) * 3 + 1)}┤{Colors.RESET}")
+    
+    # 打印每个CPU的信息
     for cpu_name, info in sorted(status_info.items()):
-        print(f"\n{cpu_name.upper()}:")
-        if info['current_freq']:
-            print(f"  当前频率: {info['current_freq']} kHz ({info['current_freq']/1000:.1f} MHz)")
-        else:
-            print(f"  当前频率: N/A")
-        print(f"  调频策略: {info['governor']}")
+        current_freq = info.get('current_freq')
+        governor = info.get('governor', 'N/A')
+        available_freqs = info.get('available_freqs', [])
         
-        if info['available_freqs']:
-            freqs = info['available_freqs']
-            print(f"  可用频率: {len(freqs)} 档")
-            print(f"    最低: {min(freqs)} kHz ({min(freqs)/1000:.1f} MHz)")
-            print(f"    最高: {max(freqs)} kHz ({max(freqs)/1000:.1f} MHz)")
+        # CPU名称
+        cpu_display = f"{Colors.BRIGHT_CYAN}{cpu_name.upper()}{Colors.RESET}"
+        
+        # 当前频率
+        if current_freq:
+            freq_display = f"{Colors.BRIGHT_GREEN}{format_frequency(current_freq * 1000, 'MHz')}{Colors.RESET}"
+        else:
+            freq_display = f"{Colors.DIM}N/A{Colors.RESET}"
+        
+        # 频率档位和进度条
+        if available_freqs and current_freq:
+            num_levels = len(available_freqs)
+            # 计算当前频率在可用频率中的位置
+            if current_freq in available_freqs:
+                current_idx = available_freqs.index(current_freq)
+            else:
+                # 找最接近的
+                current_idx = min(range(len(available_freqs)), 
+                                  key=lambda i: abs(available_freqs[i] - current_freq))
+            
+            percentage = current_idx / (num_levels - 1) if num_levels > 1 else 0
+            level_display = f"{current_idx + 1}/{num_levels}"
+        else:
+            percentage = 0
+            level_display = "N/A"
+        
+        # 调频策略
+        if governor == 'userspace':
+            gov_color = Colors.GREEN
+        elif governor in ['performance', 'ondemand']:
+            gov_color = Colors.YELLOW
+        else:
+            gov_color = Colors.RESET
+        gov_display = f"{gov_color}{governor}{Colors.RESET}"
+        
+        # 频率范围
+        if available_freqs:
+            min_freq = min(available_freqs)
+            max_freq = max(available_freqs)
+            range_display = f"{format_frequency(min_freq * 1000, 'MHz')}-{format_frequency(max_freq * 1000, 'MHz')}"
+        else:
+            range_display = "N/A"
+        
+        # 打印行
+        columns = [cpu_display, freq_display, level_display, gov_display, range_display]
+        print_table_row(columns, widths, separator='│')
+        
+        # 打印进度条（如果有可用频率）
+        if available_freqs and current_freq:
+            bar = draw_progress_bar(percentage, width=60, 
+                                    color=Colors.BRIGHT_GREEN if percentage > 0.6 else Colors.BRIGHT_YELLOW if percentage > 0.3 else Colors.BRIGHT_BLUE)
+            print(f"│ {' ' * widths[0]}  {bar}  │")
     
-    print("=" * 60 + "\n")
+    print(f"{Colors.BOLD}└{'─' * (sum(widths) + len(widths) * 3 + 1)}┘{Colors.RESET}\n")
 
 
 def print_gpu_status(gpu_info):
     """美化打印GPU状态信息"""
-    print("\n" + "=" * 60)
-    print("边缘端GPU状态")
-    print("=" * 60)
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_MAGENTA}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}║{' ' * 30}边缘端GPU状态{' ' * 32}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}╚{'═' * 78}╝{Colors.RESET}\n")
     
-    print("\nGPU:")
-    if gpu_info.get('current_freq'):
-        freq_mhz = gpu_info['current_freq'] / 1000000
-        print(f"  当前频率: {gpu_info['current_freq']} Hz ({freq_mhz:.1f} MHz)")
+    current_freq = gpu_info.get('current_freq')
+    governor = gpu_info.get('governor', 'N/A')
+    available_freqs = gpu_info.get('available_freqs', [])
+    path = gpu_info.get('path', 'N/A')
+    
+    # 表头
+    widths = [20, 18, 15, 20]
+    headers = ["当前频率", "频率档位", "调频策略", "频率范围"]
+    
+    # 打印表头
+    print(f"{Colors.BOLD}┌{'─' * (sum(widths) + len(widths) * 3 + 1)}┐{Colors.RESET}")
+    colors = [Colors.BOLD + Colors.BRIGHT_YELLOW] * len(headers)
+    print_table_row(headers, widths, colors, '│')
+    print(f"{Colors.BOLD}├{'─' * (sum(widths) + len(widths) * 3 + 1)}┤{Colors.RESET}")
+    
+    # 当前频率
+    if current_freq:
+        freq_display = f"{Colors.BRIGHT_GREEN}{format_frequency(current_freq, 'MHz')}{Colors.RESET}"
     else:
-        print(f"  当前频率: N/A")
+        freq_display = f"{Colors.DIM}N/A{Colors.RESET}"
     
-    print(f"  调频策略: {gpu_info.get('governor', 'N/A')}")
+    # 频率档位和进度条
+    if available_freqs and current_freq:
+        num_levels = len(available_freqs)
+        # 计算当前频率在可用频率中的位置
+        if current_freq in available_freqs:
+            current_idx = available_freqs.index(current_freq)
+        else:
+            # 找最接近的
+            current_idx = min(range(len(available_freqs)), 
+                              key=lambda i: abs(available_freqs[i] - current_freq))
+        
+        percentage = current_idx / (num_levels - 1) if num_levels > 1 else 0
+        level_display = f"{current_idx + 1}/{num_levels}"
+    else:
+        percentage = 0
+        level_display = "N/A"
     
-    if gpu_info.get('available_freqs'):
-        freqs = gpu_info['available_freqs']
-        print(f"  可用频率: {len(freqs)} 档")
-        min_freq_mhz = min(freqs) / 1000000
-        max_freq_mhz = max(freqs) / 1000000
-        print(f"    最低: {min(freqs)} Hz ({min_freq_mhz:.1f} MHz)")
-        print(f"    最高: {max(freqs)} Hz ({max_freq_mhz:.1f} MHz)")
+    # 调频策略
+    if governor == 'userspace':
+        gov_color = Colors.GREEN
+    elif governor in ['performance', 'simple_ondemand']:
+        gov_color = Colors.YELLOW
+    else:
+        gov_color = Colors.RESET
+    gov_display = f"{gov_color}{governor}{Colors.RESET}"
     
-    if gpu_info.get('path'):
-        print(f"  控制路径: {gpu_info['path']}")
+    # 频率范围
+    if available_freqs:
+        min_freq = min(available_freqs)
+        max_freq = max(available_freqs)
+        range_display = f"{format_frequency(min_freq, 'MHz')}-{format_frequency(max_freq, 'MHz')}"
+    else:
+        range_display = "N/A"
     
-    print("=" * 60 + "\n")
+    # 打印数据行
+    columns = [freq_display, level_display, gov_display, range_display]
+    print_table_row(columns, widths, separator='│')
+    
+    # 打印进度条（如果有可用频率）
+    if available_freqs and current_freq:
+        bar = draw_progress_bar(percentage, width=60, 
+                                color=Colors.BRIGHT_GREEN if percentage > 0.6 else Colors.BRIGHT_YELLOW if percentage > 0.3 else Colors.BRIGHT_BLUE)
+        print(f"│ {bar}  │")
+    
+    print(f"{Colors.BOLD}└{'─' * (sum(widths) + len(widths) * 3 + 1)}┘{Colors.RESET}")
+    
+    # 控制路径信息
+    if path and path != 'N/A':
+        print(f"\n{Colors.DIM}控制路径: {path}{Colors.RESET}\n")
+    else:
+        print()
 
 
 def main():
@@ -372,14 +653,16 @@ def main():
     
     args = parser.parse_args()
     
-    print("=" * 60)
-    print("云端DVFS控制工具")
-    print("=" * 60)
+    # 打印欢迎横幅
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 28}云端DVFS控制工具{' ' * 31}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 20}Dynamic Voltage and Frequency Scaling{' ' * 20}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * 78}╝{Colors.RESET}")
     
     # 如果使用SSH隧道
     if args.use_tunnel:
-        print("\n>>> 使用SSH隧道模式")
-        print("-" * 60)
+        print(f"\n{Colors.BOLD}{Colors.BRIGHT_YELLOW}>>> 使用SSH隧道模式{Colors.RESET}")
+        print(f"{Colors.DIM}{'─' * 78}{Colors.RESET}")
         
         if not setup_ssh_tunnel(
             remote_host=args.host,
@@ -389,26 +672,28 @@ def main():
             ssh_port=args.ssh_port,
             ssh_user=args.ssh_user
         ):
-            print("SSH隧道建立失败，退出")
+            print(f"{Colors.RED}SSH隧道建立失败，退出{Colors.RESET}")
             sys.exit(1)
         
         # 使用localhost和本地隧道端口
-        print(f"\n隧道已建立，通过 localhost:{args.local_port} 连接到边缘端")
+        print(f"\n{Colors.GREEN}✓ 隧道已建立{Colors.RESET}")
+        print(f"{Colors.DIM}通过 localhost:{args.local_port} 连接到边缘端{Colors.RESET}")
         client = CloudDVFSClient(host='localhost', port=args.local_port, timeout=args.timeout)
-        print(f"目标边缘端: {args.ssh_user}@{args.host}:{args.port} (via SSH tunnel)\n")
+        print(f"{Colors.CYAN}目标边缘端: {args.ssh_user}@{args.host}:{args.port} (via SSH tunnel){Colors.RESET}\n")
     else:
         # 直接连接
+        print(f"\n{Colors.BRIGHT_YELLOW}>>> 直接连接模式{Colors.RESET}")
         client = CloudDVFSClient(host=args.host, port=args.port, timeout=args.timeout)
-        print(f"目标边缘端: {args.host}:{args.port}\n")
+        print(f"{Colors.CYAN}目标边缘端: {args.host}:{args.port}{Colors.RESET}\n")
     
     # 交互模式
     if args.interactive:
-        print("进入交互模式 (输入 'help' 查看帮助, 'quit' 退出)")
         interactive_mode(client)
         return
     
     # 执行单个命令
     if args.status:
+        print(f"{Colors.DIM}正在查询边缘端状态...{Colors.RESET}")
         response = client.get_status(target=args.target)
         if response['status'] == 'success':
             if args.target == 'all':
@@ -423,67 +708,175 @@ def main():
                 if 'status_info' in response:
                     print_cpu_status(response['status_info'])
         else:
-            print(f"错误: {response.get('message', '未知错误')}")
+            print(f"{Colors.RED}✗ 错误: {response.get('message', '未知错误')}{Colors.RESET}")
     
     elif args.governor:
+        print(f"{Colors.DIM}正在设置调频策略...{Colors.RESET}")
         response = client.set_governor(args.governor, args.cpu, target=args.target)
-        print(f"\n结果: {response.get('message', response['status'])}\n")
+        if response['status'] == 'success':
+            print(f"\n{Colors.GREEN}✓ {response.get('message', response['status'])}{Colors.RESET}\n")
+        else:
+            print(f"\n{Colors.RED}✗ {response.get('message', response['status'])}{Colors.RESET}\n")
     
     elif args.freq is not None:
+        print(f"{Colors.DIM}正在设置频率...{Colors.RESET}")
         response = client.set_frequency(args.freq, args.cpu, target=args.target)
         if response['status'] == 'success':
-            print(f"\n结果: {response.get('message', '成功')}\n")
+            print(f"\n{Colors.GREEN}✓ {response.get('message', '成功')}{Colors.RESET}")
             if 'current_status' in response:
                 print_cpu_status(response['current_status'])
             elif 'gpu_status' in response:
                 print_gpu_status(response['gpu_status'])
         else:
-            print(f"\n错误: {response.get('message', '未知错误')}\n")
+            print(f"\n{Colors.RED}✗ 错误: {response.get('message', '未知错误')}{Colors.RESET}\n")
     
     else:
         parser.print_help()
 
 
+def print_interactive_help():
+    """打印交互模式帮助"""
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 28}DVFS 交互模式帮助{' ' * 29}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * 78}╝{Colors.RESET}\n")
+    
+    commands = [
+        ("status [target]", "查询边缘端状态", "cpu, gpu, all"),
+        ("freq <频率> [target]", "设置频率", "0.0-1.0 或具体频率值"),
+        ("freq <频率> <CPU编号>", "设置指定CPU频率", "仅适用于CPU"),
+        ("governor <策略> [target]", "设置调频策略", "userspace, performance等"),
+        ("menu", "显示快捷菜单", ""),
+        ("help", "显示此帮助", ""),
+        ("quit/exit", "退出交互模式", ""),
+    ]
+    
+    # 打印命令列表
+    widths = [25, 25, 25]
+    headers = ["命令", "说明", "参数说明"]
+    
+    print(f"{Colors.BOLD}┌{'─' * (sum(widths) + len(widths) * 3 + 1)}┐{Colors.RESET}")
+    colors = [Colors.BOLD + Colors.BRIGHT_YELLOW] * len(headers)
+    print_table_row(headers, widths, colors, '│')
+    print(f"{Colors.BOLD}├{'─' * (sum(widths) + len(widths) * 3 + 1)}┤{Colors.RESET}")
+    
+    for i, (cmd, desc, params) in enumerate(commands):
+        colors = [Colors.BRIGHT_GREEN, Colors.RESET, Colors.DIM]
+        print_table_row([cmd, desc, params], widths, colors, '│')
+    
+    print(f"{Colors.BOLD}└{'─' * (sum(widths) + len(widths) * 3 + 1)}┘{Colors.RESET}\n")
+    
+    # 打印示例
+    print(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}常用示例:{Colors.RESET}")
+    examples = [
+        ("status", "查询CPU状态"),
+        ("status gpu", "查询GPU状态"),
+        ("status all", "查询所有状态"),
+        ("freq 0.5", "设置CPU频率到50%"),
+        ("freq 0.8 gpu", "设置GPU频率到80%"),
+        ("freq 0.8 0", "设置CPU0到80%"),
+        ("governor userspace", "设置CPU调频策略"),
+    ]
+    
+    for cmd, desc in examples:
+        print(f"  {Colors.BRIGHT_CYAN}{cmd:25s}{Colors.RESET} {Colors.DIM}- {desc}{Colors.RESET}")
+    print()
+
+
+def print_interactive_menu():
+    """打印交互菜单"""
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_GREEN}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}║{' ' * 28}快捷操作菜单{' ' * 33}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}╚{'═' * 78}╝{Colors.RESET}\n")
+    
+    menu_items = [
+        ("1", "查询CPU状态", "status", Colors.CYAN),
+        ("2", "查询GPU状态", "status gpu", Colors.MAGENTA),
+        ("3", "查询所有状态", "status all", Colors.BRIGHT_CYAN),
+        ("4", "设置CPU频率(低)", "freq 0.2", Colors.BLUE),
+        ("5", "设置CPU频率(中)", "freq 0.5", Colors.YELLOW),
+        ("6", "设置CPU频率(高)", "freq 0.8", Colors.BRIGHT_YELLOW),
+        ("7", "设置GPU频率(低)", "freq 0.2 gpu", Colors.BLUE),
+        ("8", "设置GPU频率(中)", "freq 0.5 gpu", Colors.YELLOW),
+        ("9", "设置GPU频率(高)", "freq 0.8 gpu", Colors.BRIGHT_YELLOW),
+        ("0", "返回命令行模式", "", Colors.RESET),
+    ]
+    
+    # 打印菜单项
+    widths = [8, 25, 30]
+    headers = ["编号", "操作", "对应命令"]
+    
+    print(f"{Colors.BOLD}┌{'─' * (sum(widths) + len(widths) * 3 + 1)}┐{Colors.RESET}")
+    colors = [Colors.BOLD + Colors.BRIGHT_YELLOW] * len(headers)
+    print_table_row(headers, widths, colors, '│')
+    print(f"{Colors.BOLD}├{'─' * (sum(widths) + len(widths) * 3 + 1)}┤{Colors.RESET}")
+    
+    for num, desc, cmd, color in menu_items:
+        colors = [Colors.BOLD + color, Colors.RESET, Colors.DIM]
+        print_table_row([num, desc, cmd], widths, colors, '│')
+    
+    print(f"{Colors.BOLD}└{'─' * (sum(widths) + len(widths) * 3 + 1)}┘{Colors.RESET}\n")
+
+
 def interactive_mode(client):
     """交互模式"""
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_GREEN}{'=' * 80}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}进入交互模式{Colors.RESET}")
+    print(f"{Colors.BRIGHT_YELLOW}提示: 输入 'menu' 查看快捷菜单, 'help' 查看完整帮助, 'quit' 退出{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}{'=' * 80}{Colors.RESET}\n")
+    
     while True:
         try:
-            cmd = input("\nDVFS> ").strip()
+            # 显示提示符
+            prompt = f"{Colors.BOLD}{Colors.BRIGHT_CYAN}DVFS>{Colors.RESET} "
+            cmd = input(prompt).strip()
             
             if not cmd:
                 continue
             
             if cmd.lower() in ['quit', 'exit', 'q']:
-                print("退出交互模式")
+                print(f"\n{Colors.BRIGHT_GREEN}退出交互模式{Colors.RESET}")
                 break
             
             if cmd.lower() == 'help':
-                print("""
-可用命令:
-  status [target]              - 查询边缘端状态 (target: cpu/gpu/all，默认cpu)
-  freq <频率> [target]         - 设置频率 (kHz/Hz或0.0-1.0的索引)
-  freq <频率> <CPU编号>        - 设置指定CPU的频率
-  governor <策略> [target]     - 设置调频策略 (target: cpu/gpu，默认cpu)
-  help                         - 显示此帮助
-  quit                         - 退出
-
-示例:
-  status                    - 查询CPU状态
-  status gpu                - 查询GPU状态
-  status all                - 查询所有状态
-  freq 0.5                  - 设置CPU频率到50%
-  freq 0.8 gpu              - 设置GPU频率到80%
-  freq 1200000              - 设置CPU到指定频率
-  freq 0.8 0                - 设置CPU0到80%
-  governor userspace        - 设置CPU调频策略
-  governor userspace gpu    - 设置GPU调频策略
-                """)
+                print_interactive_help()
                 continue
+            
+            if cmd.lower() == 'menu':
+                print_interactive_menu()
+                # 等待用户选择
+                choice = input(f"\n{Colors.BRIGHT_YELLOW}请选择操作 (0-9 或按Enter跳过):{Colors.RESET} ").strip()
+                
+                if choice == '1':
+                    cmd = 'status'
+                elif choice == '2':
+                    cmd = 'status gpu'
+                elif choice == '3':
+                    cmd = 'status all'
+                elif choice == '4':
+                    cmd = 'freq 0.2'
+                elif choice == '5':
+                    cmd = 'freq 0.5'
+                elif choice == '6':
+                    cmd = 'freq 0.8'
+                elif choice == '7':
+                    cmd = 'freq 0.2 gpu'
+                elif choice == '8':
+                    cmd = 'freq 0.5 gpu'
+                elif choice == '9':
+                    cmd = 'freq 0.8 gpu'
+                elif choice == '0' or not choice:
+                    continue
+                else:
+                    print(f"{Colors.RED}无效的选择{Colors.RESET}")
+                    continue
+                
+                print(f"{Colors.DIM}执行: {cmd}{Colors.RESET}")
             
             parts = cmd.split()
             
             if parts[0] == 'status':
                 target = parts[1] if len(parts) >= 2 else 'cpu'
+                print(f"{Colors.DIM}正在查询{target.upper()}状态...{Colors.RESET}")
                 response = client.get_status(target=target)
                 if response['status'] == 'success':
                     if target == 'all':
@@ -498,7 +891,7 @@ def interactive_mode(client):
                         if 'status_info' in response:
                             print_cpu_status(response['status_info'])
                 else:
-                    print(f"错误: {response.get('message', '未知错误')}")
+                    print(f"{Colors.RED}✗ 错误: {response.get('message', '未知错误')}{Colors.RESET}")
             
             elif parts[0] == 'freq' and len(parts) >= 2:
                 freq = float(parts[1])
@@ -514,23 +907,39 @@ def interactive_mode(client):
                     target = 'cpu'
                     cpu = None
                 
+                print(f"{Colors.DIM}正在设置频率...{Colors.RESET}")
                 response = client.set_frequency(freq, cpu, target=target)
-                print(f"结果: {response.get('message', response['status'])}")
+                if response['status'] == 'success':
+                    print(f"{Colors.GREEN}✓ {response.get('message', '成功')}{Colors.RESET}")
+                    # 显示状态
+                    if 'current_status' in response:
+                        print_cpu_status(response['current_status'])
+                    elif 'gpu_status' in response:
+                        print_gpu_status(response['gpu_status'])
+                else:
+                    print(f"{Colors.RED}✗ {response.get('message', response['status'])}{Colors.RESET}")
             
             elif parts[0] == 'governor' and len(parts) >= 2:
                 governor = parts[1]
                 target = parts[2] if len(parts) >= 3 else 'cpu'
+                print(f"{Colors.DIM}正在设置调频策略...{Colors.RESET}")
                 response = client.set_governor(governor, target=target)
-                print(f"结果: {response.get('message', response['status'])}")
+                if response['status'] == 'success':
+                    print(f"{Colors.GREEN}✓ {response.get('message', response['status'])}{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}✗ {response.get('message', response['status'])}{Colors.RESET}")
             
             else:
-                print("未知命令，输入 'help' 查看帮助")
+                print(f"{Colors.RED}未知命令: {parts[0]}{Colors.RESET}")
+                print(f"{Colors.YELLOW}输入 'help' 查看帮助 或 'menu' 查看快捷菜单{Colors.RESET}")
         
         except KeyboardInterrupt:
-            print("\n\n退出交互模式")
+            print(f"\n\n{Colors.BRIGHT_GREEN}退出交互模式{Colors.RESET}")
             break
+        except ValueError as e:
+            print(f"{Colors.RED}参数错误: {e}{Colors.RESET}")
         except Exception as e:
-            print(f"错误: {e}")
+            print(f"{Colors.RED}错误: {e}{Colors.RESET}")
 
 
 if __name__ == '__main__':

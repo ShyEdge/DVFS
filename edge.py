@@ -13,6 +13,47 @@ import subprocess
 import logging
 from datetime import datetime
 
+# ANSI颜色代码
+class Colors:
+    """终端颜色控制"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    
+    # 前景色
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # 亮色
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
+    
+    @staticmethod
+    def disable():
+        """禁用颜色（用于不支持ANSI的终端）"""
+        Colors.RESET = ''
+        Colors.BOLD = ''
+        Colors.DIM = ''
+        Colors.RED = Colors.GREEN = Colors.YELLOW = ''
+        Colors.BLUE = Colors.MAGENTA = Colors.CYAN = Colors.WHITE = ''
+        Colors.BRIGHT_RED = Colors.BRIGHT_GREEN = Colors.BRIGHT_YELLOW = ''
+        Colors.BRIGHT_BLUE = Colors.BRIGHT_MAGENTA = Colors.BRIGHT_CYAN = ''
+        Colors.BRIGHT_WHITE = ''
+
+# 检测终端是否支持颜色
+if not sys.stdout.isatty() or os.getenv('NO_COLOR'):
+    Colors.disable()
+
 # 配置
 HOST = '0.0.0.0'
 PORT = 9999
@@ -302,6 +343,8 @@ class GPUController:
 
 def handle_client(conn, addr, cpu_controller, gpu_controller):
     """处理客户端连接"""
+    print(f"{Colors.BRIGHT_GREEN}{'─' * 78}{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}✓ 客户端已连接: {Colors.BRIGHT_YELLOW}{addr[0]}:{addr[1]}{Colors.RESET}")
     logging.info(f"客户端已连接: {addr}")
     
     try:
@@ -310,6 +353,7 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
         if not data:
             return
         
+        print(f"{Colors.DIM}收到命令: {data}{Colors.RESET}")
         logging.info(f"收到数据: {data}")
         
         # 解析JSON命令
@@ -317,6 +361,7 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
             cmd = json.loads(data)
         except json.JSONDecodeError:
             response = {'status': 'error', 'message': '无效的JSON格式'}
+            print(f"{Colors.RED}✗ 错误: 无效的JSON格式{Colors.RESET}")
             conn.sendall(json.dumps(response, ensure_ascii=False).encode('utf-8'))
             return
         
@@ -324,6 +369,8 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
         action = cmd.get('action', '')
         target = cmd.get('target', 'cpu')  # 默认为CPU，可以是'cpu'或'gpu'
         response = {'status': 'success', 'timestamp': datetime.now().isoformat()}
+        
+        print(f"{Colors.CYAN}执行操作: {Colors.BOLD}{action}{Colors.RESET} {Colors.DIM}(目标: {target}){Colors.RESET}")
         
         # 选择控制器
         controller = cpu_controller if target == 'cpu' else gpu_controller
@@ -333,6 +380,7 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
             
             if frequency is None:
                 response = {'status': 'error', 'message': '缺少frequency参数'}
+                print(f"{Colors.RED}✗ 错误: 缺少frequency参数{Colors.RESET}")
             else:
                 if target == 'cpu':
                     cpu = cmd.get('cpu', None)
@@ -346,20 +394,25 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
                         response['current_status'] = controller.get_status()
                     else:
                         response['gpu_status'] = controller.get_status()
+                    print(f"{Colors.GREEN}✓ {target.upper()}频率设置成功{Colors.RESET}")
                 else:
                     response = {'status': 'error', 'message': f'{target.upper()}频率设置失败'}
+                    print(f"{Colors.RED}✗ {target.upper()}频率设置失败{Colors.RESET}")
         
         elif action == 'get_status':
             if target == 'all':
                 response['cpu_status'] = cpu_controller.get_status()
                 response['gpu_status'] = gpu_controller.get_status()
                 response['message'] = 'CPU和GPU状态查询成功'
+                print(f"{Colors.GREEN}✓ CPU和GPU状态查询成功{Colors.RESET}")
             elif target == 'cpu':
                 response['status_info'] = controller.get_status()
                 response['message'] = 'CPU状态查询成功'
+                print(f"{Colors.GREEN}✓ CPU状态查询成功{Colors.RESET}")
             else:  # GPU
                 response['gpu_status'] = controller.get_status()
                 response['message'] = 'GPU状态查询成功'
+                print(f"{Colors.GREEN}✓ GPU状态查询成功{Colors.RESET}")
         
         elif action == 'set_governor':
             governor = cmd.get('governor', 'userspace')
@@ -372,18 +425,27 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
             
             if success:
                 response['message'] = f'{target.upper()}调频策略设置成功: {governor}'
+                print(f"{Colors.GREEN}✓ {target.upper()}调频策略设置为 {governor}{Colors.RESET}")
             else:
                 response = {'status': 'error', 'message': f'{target.upper()}调频策略设置失败'}
+                print(f"{Colors.RED}✗ {target.upper()}调频策略设置失败{Colors.RESET}")
         
         else:
             response = {'status': 'error', 'message': f'未知的操作: {action}'}
+            print(f"{Colors.RED}✗ 未知的操作: {action}{Colors.RESET}")
         
         # 发送响应
         conn.sendall(json.dumps(response, ensure_ascii=False).encode('utf-8'))
+        status = response['status']
+        if status == 'success':
+            print(f"{Colors.DIM}响应: {Colors.GREEN}{status}{Colors.RESET}")
+        else:
+            print(f"{Colors.DIM}响应: {Colors.RED}{status}{Colors.RESET}")
         logging.info(f"发送响应: {response['status']}")
         
     except Exception as e:
         logging.error(f"处理客户端请求时出错: {e}")
+        print(f"{Colors.RED}✗ 处理请求时出错: {e}{Colors.RESET}")
         response = {'status': 'error', 'message': str(e)}
         try:
             conn.sendall(json.dumps(response, ensure_ascii=False).encode('utf-8'))
@@ -392,50 +454,93 @@ def handle_client(conn, addr, cpu_controller, gpu_controller):
     
     finally:
         conn.close()
+        print(f"{Colors.DIM}连接已关闭: {addr[0]}:{addr[1]}{Colors.RESET}")
+        print(f"{Colors.BRIGHT_GREEN}{'─' * 78}{Colors.RESET}\n")
         logging.info(f"客户端连接关闭: {addr}")
 
 
 def main():
     """主函数"""
-    print("=" * 60)
-    print("边缘端DVFS服务启动")
-    print("=" * 60)
+    # 打印欢迎横幅
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * 78}╗{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 28}边缘端DVFS服务{' ' * 33}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{' ' * 20}Dynamic Voltage and Frequency Scaling{' ' * 20}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * 78}╝{Colors.RESET}\n")
     
     # 检查权限
     if os.geteuid() != 0:
-        print("警告: 建议使用sudo运行以获得完整权限")
+        print(f"{Colors.YELLOW}⚠ 警告: 建议使用sudo运行以获得完整权限{Colors.RESET}\n")
     
     # 初始化控制器
+    print(f"{Colors.DIM}正在初始化控制器...{Colors.RESET}")
     cpu_controller = CPUController()
     gpu_controller = GPUController()
+    print(f"{Colors.GREEN}✓ 控制器初始化完成{Colors.RESET}\n")
     
     # 显示当前CPU状态
-    print("\n当前CPU状态:")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}{'─' * 78}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}当前CPU状态{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}{'─' * 78}{Colors.RESET}")
+    
     cpu_status = cpu_controller.get_status()
     for cpu_name, info in cpu_status.items():
-        print(f"  {cpu_name}:")
-        print(f"    当前频率: {info['current_freq']} kHz ({info['current_freq']/1000:.1f} MHz)" if info['current_freq'] else "    当前频率: N/A")
-        print(f"    调频策略: {info['governor']}")
+        print(f"\n  {Colors.BRIGHT_CYAN}{cpu_name.upper()}:{Colors.RESET}")
+        
+        if info['current_freq']:
+            freq_mhz = info['current_freq'] / 1000
+            print(f"    当前频率: {Colors.BRIGHT_GREEN}{info['current_freq']} kHz ({freq_mhz:.1f} MHz){Colors.RESET}")
+        else:
+            print(f"    当前频率: {Colors.DIM}N/A{Colors.RESET}")
+        
+        # 调频策略用颜色区分
+        gov = info['governor']
+        if gov == 'userspace':
+            gov_color = Colors.GREEN
+        elif gov in ['performance', 'ondemand']:
+            gov_color = Colors.YELLOW
+        else:
+            gov_color = Colors.RESET
+        print(f"    调频策略: {gov_color}{gov}{Colors.RESET}")
+        
         if info['available_freqs']:
-            print(f"    可用频率: {min(info['available_freqs'])}-{max(info['available_freqs'])} kHz")
+            min_freq = min(info['available_freqs'])
+            max_freq = max(info['available_freqs'])
+            print(f"    可用频率: {Colors.DIM}{min_freq}-{max_freq} kHz ({len(info['available_freqs'])} 档){Colors.RESET}")
     
     # 显示当前GPU状态
-    print("\n当前GPU状态:")
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_MAGENTA}{'─' * 78}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}当前GPU状态{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}{'─' * 78}{Colors.RESET}\n")
+    
     gpu_status = gpu_controller.get_status()
     if gpu_status['current_freq']:
-        print(f"  当前频率: {gpu_status['current_freq']} Hz ({gpu_status['current_freq']/1000000:.1f} MHz)")
+        freq_mhz = gpu_status['current_freq'] / 1000000
+        print(f"  当前频率: {Colors.BRIGHT_GREEN}{gpu_status['current_freq']} Hz ({freq_mhz:.1f} MHz){Colors.RESET}")
     else:
-        print(f"  当前频率: N/A")
-    print(f"  调频策略: {gpu_status['governor']}")
+        print(f"  当前频率: {Colors.DIM}N/A{Colors.RESET}")
+    
+    # 调频策略用颜色区分
+    gov = gpu_status['governor']
+    if gov == 'userspace':
+        gov_color = Colors.GREEN
+    elif gov in ['performance', 'simple_ondemand']:
+        gov_color = Colors.YELLOW
+    else:
+        gov_color = Colors.RESET
+    print(f"  调频策略: {gov_color}{gov}{Colors.RESET}")
+    
     if gpu_status['available_freqs']:
         freqs_mhz = [f/1000000 for f in gpu_status['available_freqs']]
-        print(f"  可用频率: {min(freqs_mhz):.1f}-{max(freqs_mhz):.1f} MHz ({len(gpu_status['available_freqs'])} 档)")
-    print(f"  控制路径: {gpu_status['path']}")
+        print(f"  可用频率: {Colors.DIM}{min(freqs_mhz):.1f}-{max(freqs_mhz):.1f} MHz ({len(gpu_status['available_freqs'])} 档){Colors.RESET}")
+    print(f"  控制路径: {Colors.DIM}{gpu_status['path']}{Colors.RESET}")
     
     # 启动TCP服务器
-    print(f"\n启动TCP服务器 {HOST}:{PORT}")
-    print(f"日志文件: {LOG_FILE}")
-    print("等待云端连接...\n")
+    print(f"\n{Colors.BOLD}{Colors.BRIGHT_YELLOW}{'─' * 78}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}启动TCP服务器{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}{'─' * 78}{Colors.RESET}")
+    print(f"  监听地址: {Colors.BRIGHT_CYAN}{HOST}:{PORT}{Colors.RESET}")
+    print(f"  日志文件: {Colors.DIM}{LOG_FILE}{Colors.RESET}")
+    print(f"\n{Colors.BRIGHT_GREEN}✓ 服务器已启动，等待云端连接...{Colors.RESET}\n")
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -449,16 +554,16 @@ def main():
             handle_client(conn, addr, cpu_controller, gpu_controller)
     
     except KeyboardInterrupt:
-        print("\n\n收到中断信号，正在关闭服务器...")
+        print(f"\n\n{Colors.BRIGHT_YELLOW}收到中断信号，正在关闭服务器...{Colors.RESET}")
         logging.info("服务器正常关闭")
     
     except Exception as e:
         logging.error(f"服务器错误: {e}")
-        print(f"错误: {e}")
+        print(f"{Colors.RED}✗ 服务器错误: {e}{Colors.RESET}")
     
     finally:
         server_socket.close()
-        print("服务器已关闭")
+        print(f"{Colors.BRIGHT_GREEN}✓ 服务器已关闭{Colors.RESET}\n")
 
 
 if __name__ == '__main__':
