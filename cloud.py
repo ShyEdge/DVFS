@@ -76,7 +76,7 @@ EDGE_HOST = '114.212.81.186'  # 边缘端IP地址
 EDGE_PORT = 9999  # 边缘端DVFS服务端口
 SSH_PORT = 15616  # SSH端口
 SSH_USER = 'nvidia'  # SSH用户名
-SSH_KEY_PATH = '~/shy/id_rsa_shy'  # SSH密钥路径
+SSH_KEY_PATH = '~/.ssh/id_rsa_shy'  # SSH密钥路径
 LOCAL_TUNNEL_PORT = 19999  # 本地隧道端口
 
 # 全局变量，用于存储SSH隧道进程

@@ -24,7 +24,7 @@
 - **SSH隧道模式（推荐，已配置）**: cloud.py通过SSH隧道连接到 nvidia@114.212.81.186:9999
   - SSH用户名: nvidia
   - SSH端口: 15616
-  - 使用密钥: ~/shy/id_rsa_shy
+  - 使用密钥: ~/.ssh/id_rsa_shy
 - **直接连接模式**: 仅在云端能直接访问边缘端IP时使用
 
 ### 文件说明
@@ -297,7 +297,7 @@ Jetson TX2的GPU支持多个频率档位，通常范围为：
 云端 (cloud)                          边缘端 (nvidia@114.212.81.186:15616)
     |                                      |
     |  1. SSH连接 (使用id_rsa_shy)        |
-    |     ssh -p 15616 -i ~/shy/id_rsa_shy nvidia@114.212.81.186
+    |     ssh -p 15616 -i ~/.ssh/id_rsa_shy nvidia@114.212.81.186
     |------------------------------------>|
     |                                      |
     |  2. 建立端口转发                     |
@@ -319,7 +319,7 @@ python3 cloud.py --use-tunnel --status
 # 自定义SSH用户名（默认使用 nvidia）
 python3 cloud.py --use-tunnel --ssh-user nvidia --status
 
-# 自定义SSH密钥（默认使用 ~/shy/id_rsa_shy）
+# 自定义SSH密钥（默认使用 ~/.ssh/id_rsa_shy）
 python3 cloud.py --use-tunnel --ssh-key ~/.ssh/custom_key --status
 
 # 自定义SSH端口（默认使用 15616）
@@ -335,7 +335,7 @@ python3 cloud.py --use-tunnel --local-port 20000 --status
 - **SSH用户名**: nvidia
 - **SSH端口**: 15616
 - **DVFS服务端口**: 9999
-- **SSH密钥**: ~/shy/id_rsa_shy
+- **SSH密钥**: ~/.ssh/id_rsa_shy
 - **本地隧道端口**: 19999
 
 ### SSH隧道自动管理
@@ -438,17 +438,17 @@ python3 cloud.py --freq 0.5
 **解决**:
 ```bash
 # 在cloud上检查SSH密钥权限
-ls -l ~/shy/id_rsa_shy
+ls -l ~/.ssh/id_rsa_shy
 # 应该显示 -rw------- (权限600)
 
 # 如果权限不对，修改权限
-chmod 600 ~/shy/id_rsa_shy
+chmod 600 ~/.ssh/id_rsa_shy
 
 # 测试SSH连接（使用正确的用户名、端口和IP）
-ssh -i ~/shy/id_rsa_shy -p 15616 nvidia@114.212.81.186 hostname
+ssh -i ~/.ssh/id_rsa_shy -p 15616 nvidia@114.212.81.186 hostname
 
 # 或者如果配置了edge5别名
-ssh -i ~/shy/id_rsa_shy nvidia@edge5 hostname
+ssh -i ~/.ssh/id_rsa_shy nvidia@edge5 hostname
 ```
 
 ### Q5: 查看日志

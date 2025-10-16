@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # 边缘端服务
+  dvfs-edge:
+    image: 114.212.87.136:5000/shy/dvfs-edge:latest
+    container_name: dvfs-edge
+    privileged: true  # 需要特权模式以访问系统频率控制
+    network_mode: host
+    volumes:
+      # 挂载CPU频率控制目录
+      - /sys/devices/system/cpu:/sys/devices/system/cpu
+      # 挂载GPU频率控制目录（Jetson TX2）
+      - /sys/devices/gpu.0:/sys/devices/gpu.0:rw
+      - /sys/devices/17000000.gp10b:/sys/devices/17000000.gp10b:rw
+      - /sys/kernel/debug:/sys/kernel/debug:rw
+      - /sys/devices/platform:/sys/devices/platform:rw
+      # 日志目录
+      - /tmp:/tmp
+    restart: unless-stopped
+    command: python3 edge.py
+
+  # 云端客户端（交互式使用，不常驻）
+  dvfs-cloud:
+    image: 114.212.87.136:5000/shy/dvfs-cloud:latest
+    container_name: dvfs-cloud
+    network_mode: host
+    volumes:
+      # 挂载SSH密钥（如果需要SSH隧道）
+      - ~/.ssh:/root/.ssh:ro
+    stdin_open: true
+    tty: true
+    # 云端一般手动运行命令，不需要自动启动
+    profiles:
+      - manual
+
